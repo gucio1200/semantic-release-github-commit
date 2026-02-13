@@ -38,22 +38,54 @@ describe("getAuthToken", () => {
 describe("parseRepositoryUrl", () => {
   it("should parse HTTPS GitHub URL", () => {
     const result = parseRepositoryUrl("https://github.com/owner/repo.git");
-    expect(result).toEqual({ owner: "owner", repo: "repo" });
+    expect(result).toEqual({ owner: "owner", repo: "repo", host: "github.com" });
   });
 
   it("should parse HTTPS GitHub URL without .git", () => {
     const result = parseRepositoryUrl("https://github.com/owner/repo");
-    expect(result).toEqual({ owner: "owner", repo: "repo" });
+    expect(result).toEqual({ owner: "owner", repo: "repo", host: "github.com" });
   });
 
   it("should parse SSH GitHub URL", () => {
     const result = parseRepositoryUrl("git@github.com:owner/repo.git");
-    expect(result).toEqual({ owner: "owner", repo: "repo" });
+    expect(result).toEqual({ owner: "owner", repo: "repo", host: "github.com" });
   });
 
   it("should parse simple owner/repo format", () => {
     const result = parseRepositoryUrl("owner/repo");
-    expect(result).toEqual({ owner: "owner", repo: "repo" });
+    expect(result).toEqual({ owner: "owner", repo: "repo", host: "github.com" });
+  });
+
+  it("should parse GitHub Enterprise URL", () => {
+    const result = parseRepositoryUrl("https://github.shell.com/Papua/gh-workflows");
+    expect(result).toEqual({ owner: "Papua", repo: "gh-workflows", host: "github.shell.com" });
+  });
+
+  it("should parse GitHub Enterprise SSH URL", () => {
+    const result = parseRepositoryUrl("git@github.shell.com:Papua/gh-workflows.git");
+    expect(result).toEqual({ owner: "Papua", repo: "gh-workflows", host: "github.shell.com" });
+  });
+
+  it("should parse HTTPS GitHub URL with credentials", () => {
+    const result = parseRepositoryUrl(
+      "https://x-access-token:ghs_123456@github.com/owner/repo.git",
+    );
+    expect(result).toEqual({
+      owner: "owner",
+      repo: "repo",
+      host: "github.com",
+    });
+  });
+
+  it("should parse GHES URL with credentials", () => {
+    const result = parseRepositoryUrl(
+      "https://x-access-token:ghs_123456@github.example.com/owner/repo.git",
+    );
+    expect(result).toEqual({
+      owner: "owner",
+      repo: "repo",
+      host: "github.example.com",
+    });
   });
 
   it("should throw error for invalid URL", () => {
@@ -79,6 +111,7 @@ describe("getRepoInfo", () => {
       owner: "owner",
       repo: "repo",
       branch: "main",
+      host: "github.com",
     });
   });
 

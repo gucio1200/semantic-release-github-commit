@@ -69,6 +69,7 @@ export interface RepoInfo {
   owner: string;
   repo: string;
   branch: string;
+  host: string;
 }
 
 export interface FileBlob {

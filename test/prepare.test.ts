@@ -383,4 +383,43 @@ describe("prepare", () => {
       "base64",
     );
   });
+
+  it("should initialize GitHubClient with custom API URL for Enterprise", async () => {
+    const pluginConfig: PluginConfig = {
+      files: ["dist/**"],
+    };
+    const context = createMockContext({
+      options: {
+        repositoryUrl: "https://github.enterprise.com/owner/repo.git",
+        branches: ["main"],
+      },
+    });
+
+    // Mock resolve to skip actual work
+    mockResolveFiles.mockResolvedValue([]);
+
+    await prepare(pluginConfig, context);
+
+    expect(GitHubClient).toHaveBeenCalledWith(
+      expect.any(String),
+      "https://github.enterprise.com/api/v3",
+    );
+  });
+
+  it("should initialize GitHubClient with undefined API URL for github.com", async () => {
+    const pluginConfig: PluginConfig = {
+      files: ["dist/**"],
+    };
+    const context = createMockContext({
+      options: {
+        repositoryUrl: "https://github.com/owner/repo.git",
+        branches: ["main"],
+      },
+    });
+
+    mockResolveFiles.mockResolvedValue([]);
+    await prepare(pluginConfig, context);
+
+    expect(GitHubClient).toHaveBeenCalledWith(expect.any(String), undefined);
+  });
 });

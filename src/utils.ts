@@ -26,28 +26,59 @@ export function getAuthToken(
 export function parseRepositoryUrl(url: string): {
   owner: string;
   repo: string;
+  host: string;
 } {
   // Handle various GitHub URL formats:
   // - https://github.com/owner/repo.git
+  // - https://x-access-token:token@github.com/owner/repo.git
   // - git@github.com:owner/repo.git
   // - https://github.com/owner/repo
   // - owner/repo
 
-  let match = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
+  let sanitizedUrl = url.replace(/\.git$/, "");
+  let host = "";
+  let owner = "";
+  let repo = "";
 
-  if (!match) {
-    // Try simple owner/repo format
-    match = url.match(/^([^/]+)\/([^/]+)$/);
+  try {
+    // Try parsing as a standard URL first (handles https://, ssh://, etc.)
+    const parsedUrl = new URL(sanitizedUrl);
+    host = parsedUrl.hostname;
+    
+    // Path usually starts with /, so split by / and get parts
+    const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+    if (pathParts.length >= 2) {
+      owner = pathParts[pathParts.length - 2];
+      repo = pathParts[pathParts.length - 1];
+    }
+  } catch (e) {
+    // If URL parsing fails, it might be an SCP-like syntax (git@github.com:owner/repo.git)
+    // or a simple "owner/repo" string
+    
+    // Check for SCP-like syntax (host:owner/repo)
+    const scpMatch = sanitizedUrl.match(/^([a-zA-Z0-9@._-]+):([^/]+)\/([^/?#]+)$/);
+    if (scpMatch) {
+      // Extract host from "git@host" or just "host"
+      const hostPart = scpMatch[1];
+      host = hostPart.includes("@") ? hostPart.split("@")[1] : hostPart;
+      owner = scpMatch[2];
+      repo = scpMatch[3];
+    } else {
+      // Check for simple owner/repo
+      const simpleMatch = sanitizedUrl.match(/^([^/]+)\/([^/]+)$/);
+      if (simpleMatch) {
+        host = "github.com";
+        owner = simpleMatch[1];
+        repo = simpleMatch[2];
+      }
+    }
   }
 
-  if (!match) {
+  if (!host || !owner || !repo) {
     throw createError("ENOREPO", `Unable to parse repository URL: ${url}`);
   }
 
-  const owner = match[1];
-  const repo = match[2].replace(/\.git$/, "");
-
-  return { owner, repo };
+  return { owner, repo, host };
 }
 
 /**
@@ -65,7 +96,7 @@ export function getRepoInfo(context: SemanticReleaseContext): RepoInfo {
     );
   }
 
-  const { owner, repo } = parseRepositoryUrl(repositoryUrl);
+  const { owner, repo, host } = parseRepositoryUrl(repositoryUrl);
 
   // Detect branch from environment or branch config
   let branch =
@@ -88,7 +119,7 @@ export function getRepoInfo(context: SemanticReleaseContext): RepoInfo {
     );
   }
 
-  return { owner, repo, branch };
+  return { owner, repo, branch, host };
 }
 
 /**

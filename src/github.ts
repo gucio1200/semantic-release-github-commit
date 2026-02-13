@@ -11,8 +11,11 @@ import { createError } from "./errors";
 export class GitHubClient {
   private octokit: Octokit;
 
-  constructor(token: string) {
-    this.octokit = new Octokit({ auth: token });
+  constructor(token: string, baseUrl?: string) {
+    this.octokit = new Octokit({
+      auth: token,
+      baseUrl,
+    });
   }
 
   /**

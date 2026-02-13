@@ -22,8 +22,18 @@ export async function prepare(
     `Preparing to commit files to ${repoInfo.owner}/${repoInfo.repo}:${repoInfo.branch}`,
   );
 
+  // Determine API URL for GitHub Enterprise if not github.com
+  const apiUrl =
+    repoInfo.host === "github.com"
+      ? undefined
+      : `https://${repoInfo.host}/api/v3`;
+
+  if (apiUrl) {
+    logger.log(`Using custom GitHub API URL: ${apiUrl}`);
+  }
+
   // Initialize GitHub client
-  const github = new GitHubClient(token);
+  const github = new GitHubClient(token, apiUrl);
 
   // Resolve file patterns to actual files
   logger.log(`Resolving file patterns: ${pluginConfig.files.join(", ")}`);
@@ -101,7 +111,8 @@ export async function prepare(
     commitMessage = commitMessage
       .replace(/\$\{nextRelease\.version\}/g, nextRelease.version)
       .replace(/\$\{nextRelease\.gitTag\}/g, nextRelease.gitTag)
-      .replace(/\$\{nextRelease\.gitHead\}/g, nextRelease.gitHead);
+      .replace(/\$\{nextRelease\.gitHead\}/g, nextRelease.gitHead)
+      .replace(/\$\{nextRelease\.notes\}/g, nextRelease.notes || "");
   } else if (!nextRelease) {
     // Fallback if no nextRelease context
     commitMessage = commitMessage || "chore(release): update [skip ci]";
@@ -150,35 +161,30 @@ export async function prepare(
   logger.log(`Updating ref ${repoInfo.branch} to ${commit.sha}...`);
   await github.updateRef(repoInfo, commit.sha);
 
-  // Fetch the new commit into the local repository
-  // This is critical for semantic-release to include this commit in the release tag
-  logger.log("Fetching new commit into local repository...");
-  try {
-    // Configure git to use the GitHub token for this fetch
-    const repositoryUrl = context.options.repositoryUrl || "";
-    const authenticatedUrl = repositoryUrl.replace(
-      "https://github.com/",
-      `https://x-access-token:${token}@github.com/`,
-    );
-
-    // Set the remote URL with authentication
-    await execa("git", ["remote", "set-url", "origin", authenticatedUrl], {
-      cwd,
-      env,
-    });
-
-    // Fetch the new commit
-    await execa("git", ["fetch", "origin", repoInfo.branch], { cwd, env });
-
-    // Reset to the fetched commit
-    await execa("git", ["reset", "--hard", `origin/${repoInfo.branch}`], {
-      cwd,
-      env,
-    });
-
-    logger.log(`Local repository updated to ${commit.sha}`);
-  } catch (error: any) {
-    logger.error(
+      // Fetch the new commit into the local repository
+      // This is critical for semantic-release to include this commit in the release tag
+      logger.log("Fetching new commit into local repository...");
+      try {
+        // Configure git to use the GitHub token for this fetch
+        // We construct the URL manually to ensure we use HTTPS with the token
+        // This supports both GitHub.com and GitHub Enterprise (GHES)
+        const authenticatedUrl = `https://x-access-token:${token}@${repoInfo.host}/${repoInfo.owner}/${repoInfo.repo}.git`;
+  
+        // Fetch the new commit directly from the authenticated URL without modifying "origin"
+        // This prevents conflicts with semantic-release's internal git operations
+        await execa("git", ["fetch", authenticatedUrl, repoInfo.branch], {
+          cwd,
+          env,
+        });
+  
+        // Reset to the fetched commit (which is now in FETCH_HEAD)
+        await execa("git", ["reset", "--hard", "FETCH_HEAD"], {
+          cwd,
+          env,
+        });
+  
+        logger.log(`Local repository updated to ${commit.sha}`);
+      } catch (error: any) {    logger.error(
       "Failed to fetch new commit into local repository:",
       error.message,
     );
